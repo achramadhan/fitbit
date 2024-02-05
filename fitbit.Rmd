@@ -1,0 +1,344 @@
+---
+title: "Fitbit Apps"
+author: "Rama"
+date: "2024-02-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Dataset
+the data set -> https://www.kaggle.com/datasets/arashnic/fitbit
+
+
+
+## The goals
+The main goal is to train the ability to clean, process, analyze and visualize fitbit data. And to see the activity of 33 users for one month. creating dummy values weight, height for BMI category. Predict calorie and distance values using linear regression
+
+## Load library 
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+library(dplyr)
+library(janitor)
+library(lubridate)
+```
+
+
+## import dataset
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+steps <- read.csv("dailySteps_merged.csv") %>% clean_names()
+calories <- read.csv("dailyCalories_merged.csv") %>% clean_names()
+sleep <- read.csv("sleepDay_merged.csv") %>% clean_names()
+```
+
+```{r}
+intensities <- read.csv("dailyIntensities_merged.csv") %>% clean_names()
+colnames(intensities)
+intensities <- intensities %>%
+  mutate (total_active = round((sedentary_minutes+fairly_active_minutes+
+           lightly_active_minutes+very_active_minutes)/60,1))
+```
+creating new column total_active by summing the sedentary_minutes+fairly_active_minutes+lightly_active_minutes+very_active_minutes columns.
+
+```{r message=FALSE, warning=FALSE}
+
+activity <- read.csv("dailyActivity_merged.csv") %>% clean_names()
+colnames(activity)
+activity <- activity %>% select(c(id,activity_date,total_distance)) 
+
+```
+
+### Showing All Coulumn Names
+```{r}
+colnames(activity)
+colnames(steps)
+colnames(intensities)
+colnames(sleep)
+colnames(calories)
+
+```
+view all column names for each table to perform table joins
+
+## Joining Table
+```{r}
+
+fitbit <- left_join(activity,steps, by = c('id'='id', 'activity_date'='activity_day'))
+
+fitbit <- left_join(fitbit, calories, by = c('id'='id','activity_date'='activity_day'))
+
+intensities <- intensities %>% select(c(id, activity_day, total_active))
+
+fitbit <- left_join(fitbit,intensities, by = c('id'='id','activity_date'='activity_day'))
+
+sleep <- sleep %>% select(-c(total_sleep_records)) 
+
+#changing data type before joining table sleep, because different format
+fitbit$activity_date <- mdy(fitbit$activity_date)
+sleep$sleep_day <- mdy_hms(sleep$sleep_day)
+
+fitbit <- left_join(fitbit, sleep, by = c('id'='id','activity_date'= 'sleep_day'))
+
+```
+
+### Creat Dummy Value for Weight and Height, generate random
+```{r}
+# extract id from dataset
+id_values <- unique(fitbit$id)
+
+# determine the minimum and maximum values, make sure the values are same with total of id (33)
+min_values <- c(50,80,66,64,46,102,84,74,86,44,58,68,70,100,65,75,54,86,66,76,56,65,84,94,86,96,74,104,56,66,76,74,84)
+max_values <- c(52,82,68,66,48,104,86,78,88,48,60,70,72,102,67,77,56,88,67,78,58,67,86,96,88,98,76,106,58,68,78,76,86)
+
+# Random value for height between 155 - 189
+height <-runif(33, min=155, max = 189)
+
+#Create data frame from min, max, height
+df <- data.frame(id=id_values, min=min_values, max = max_values, height = height)
+
+```
+
+### Joining df with master table(fitbit)
+```{r}
+fitbit <- fitbit %>% left_join(df, by='id')
+```
+### Generate Predefined Values
+```{r}
+
+fitbit <- fitbit %>% mutate(weight = runif(n(), min=min, max=max)) %>% 
+  select(-c(min,max))
+```
+create a weight column by using the run if(n) function, when the number of rows matches then the value will be executed according to the number of rows, because in the table not all ids have the same number of rows.
+
+### Adding BMI and BMI Category
+```{r}
+#Adding BMI value 
+fitbit$bmi<- fitbit$weight/(fitbit$height/100)^2
+#Adding BMI Category
+fitbit$bmi_category <- cut(fitbit$bmi, 
+                              breaks = c(-Inf, 18.5, 25, 30, Inf), 
+                              labels = c("Underweight", "Normal weight", "Overweight", "Obesity"))
+
+```
+BMI with value < 18.5 is underweight, value < 25 is normal weight, value < 30 is overweight, value > 30 is overweight.
+
+### changing digits 
+```{r}
+fitbit$height<- round(fitbit$height, digits= 0)
+fitbit$weight<- round(fitbit$weight, digits= 2)
+fitbit$bmi<- round(fitbit$bmi, digits= 1)
+```
+organize the digits in the column so that it is not confusing, for height without digits, weight 2 digits, and BMI one digits
+
+### Changing data type for Step Total and Calories
+```{r}
+
+fitbit$step_total <- as.numeric(fitbit$step_total)
+fitbit$calories <- as.numeric(fitbit$calories)
+```
+
+
+## Segmentation user
+
+
+
+
+### Activty of user by Using APPS in Hour
+```{r}
+  type_of_usage_device <- fitbit %>% 
+    group_by(id) %>% 
+    summarise(activity = mean(total_active)) %>% 
+    mutate(usage = case_when(
+      activity<=10~"low",
+      activity<=20~"moderate", 
+      TRUE ~"high use")) %>% 
+    select(-c(activity)) %>% print(n=5)
+
+```
+categorizes the average use of the application in hours, the value <=10 is low, <=20 is moderate, the rest is High Use.
+
+
+
+### Activty of user by Average Step 
+```{r}
+  
+  user_type <- fitbit %>% 
+    group_by(id) %>% 
+    summarise(mean_steps = mean(step_total)) %>% 
+    mutate(user_type = case_when(
+      mean_steps <= 5000 ~ "sendentary",
+      mean_steps<7500~"lightly active",
+      mean_steps<10000~"fairly active",
+      TRUE ~ "very active"
+    )) %>%select(-c(mean_steps)) %>% 
+    print(n=5)
+
+##joining the data to master(fitbit)
+  fitbit <- left_join(fitbit, type_of_usage_device,by="id")
+  fitbit <- left_join(fitbit, user_type ,by="id")
+
+```
+categorizes the average step per user, the value <=5000 is sendentary, <7500 is lightly active, <10000 is fairly active, else very active.
+
+## Checking NA Values
+```{r}
+  #checking na values
+  sapply(fitbit, function(x)sum(is.na(x)))
+
+```
+total_minutes_asleep and total_time_in_bed there are 530 Na Values, this is due to incomplete data. and can still be used 
+
+## Analyze Phase
+```{r}
+#QUICK Summary
+summary(fitbit)
+```
+
+### Distribution of Bmi Category
+```{r}
+library(ggplot2)
+fitbit %>% group_by(bmi_category) %>% 
+  summarise (total = n_distinct(id),.groups = "drop")%>%
+  ggplot(aes(bmi_category,total, fill=bmi_category))+
+  geom_bar(stat="identity")+
+  geom_text(aes(label = total))+
+  labs(title="Total by BMI Category")+
+  theme_minimal()
+
+```
+there is a change in data from 33 to 35, it can be ascertained that there are two ids experiencing changes in the bmi category, over the past month. from the chart we know that normal weight, overweight, and obesity. are high users of the app.
+
+### usage type per BMI Category
+```{r}
+fitbit %>% group_by(bmi_category, usage) %>% 
+  summarise (total = n_distinct(id),.groups = "drop")%>%
+  ggplot(aes(usage,total, fill=bmi_category))+
+  geom_bar(stat="identity", position=position_dodge())+
+  labs(title="Total by BMI Category",
+       caption = "high use = average user using the apps more than 20 hours, moderate = average user using the apps from 11 to 20 hours")+
+  theme_minimal()
+```
+
+
+### User Type
+```{r}
+fitbit %>% group_by(bmi_category, user_type) %>% 
+  summarise (total = n_distinct(id),.groups="drop")%>%
+  ggplot(aes(user_type,total, fill=bmi_category))+
+  geom_bar(stat="identity", position=position_dodge())+
+  labs(title="Total by BMI Category",
+       caption = "categorizes the average step per user, the value <=5000 is sendentary, <7500 is lightly active, <10000 is fairly active, else very active")+
+  theme_minimal()
+
+```
+this is the number of type of user based on bmi category
+
+### Average Step by Days of Week
+
+```{r}
+fitbit %>% 
+  mutate(activity_date = wday(activity_date, label=TRUE)) %>% 
+  group_by(activity_date, bmi_category) %>% 
+  summarise(mean_distance = mean(total_distance),.groups = "drop") %>% 
+  ggplot(aes(activity_date, mean_distance, group = bmi_category, color=bmi_category))+
+  geom_line(size = 1.4)+
+  theme_minimal()+
+  labs(title ="Activity Average Distance by BMI Category",
+    y = "Total Distance (KM)")
+
+```
+almost all bmi categories take steps above the recommended 4000-5000 per day. obesity is most active in taking an average of more than 6.5KM of steps per day. 
+
+### Time Sleep vs Total Step
+```{r}
+library(gridExtra)
+grid.arrange(
+{fitbit %>% mutate(activity_date = wday(activity_date, label=TRUE)) %>% 
+  group_by(activity_date, bmi_category) %>% 
+  summarise(mean_asleep = round(mean(total_minutes_asleep, na.rm = TRUE)/60,2),.groups = "drop") %>% 
+  ggplot(aes(activity_date, mean_asleep, fill=bmi_category))+
+  geom_bar(stat = 'identity', position = position_dodge())+
+  geom_hline(yintercept = 8, color = "black")+
+  geom_hline(yintercept = 6, color = "black")+
+  labs(title = 'Mean Sleep By BMI Category',
+       y = "Hour",
+       x = "Day of Week")+
+      theme(legend.position = "top")+
+    guides(fill = guide_legend(nrow = 2, title = NULL))},
+  
+{fitbit %>% 
+    ggplot(aes(step_total, total_minutes_asleep))+
+    geom_jitter()+
+    geom_smooth(color="red")+
+  labs(title = 'Total Step vs Total Sleep',
+       y = "Total Step",
+       x = "Total Sleep",
+       caption = "correlation :-0.1868665 ")},
+ncol=2 
+)
+
+```
+Due to the lack of 530 rows of data, the results of the plot above show the average per day in hours spent by users to sleep. the average user already has the recommended quality of sleep between 6 to 8 hours. but obesity on Sundays has below average quality, while underweight on Monday, Wednesday, Thursday has below average sleep time.
+
+
+
+## Creating correlation heatpmap between multiple columns
+```{r}
+
+#load library
+library(reshape2)
+# changing fitbit tabel to long format
+fitbit_melt <- fitbit %>% select(-c(bmi_category,id,activity_date, usage, user_type, total_minutes_asleep,total_time_in_bed))
+# Menghitung matriks korelasi
+fitbit_cor <- round(cor(fitbit_melt, use = "pairwise.complete.obs"),2)
+#because there is na value in 2 column, we use pairwise.complete.obs
+melt <- melt(fitbit_cor)
+head(melt)
+```
+### Creating Heatmap Correlation
+
+```{r}
+ggplot(melt, aes(x = Var1, y = Var2,fill = value)) +
+  geom_tile(aes(), colour = "white") +
+  scale_fill_gradient(low = "white", high = "red") +
+  ggtitle("Heatmap Correlation Fitbit")+
+  geom_text(aes(label = value))
+
+```
+
+
+### Predict Calories using Linear Regression Model
+```{r}
+
+model <- lm(total_distance~step_total+weight+height, data =fitbit)
+summary(model)
+
+```
+weight and height are not very significant, while step_total is very significant to determine the amount of total_distance. every 1 unit in total_step will increase the value of the dependent variable (distance) by 0.000757.  
+
+
+### Predict
+```{r}
+
+df <- data.frame(step_total=c(12000),weight=c(80),height=c(171))
+predictions <- predict(model, newdata=df)
+predictions
+```
+if we enter the value of 12000 for total steps, 80 for weight, and 171 for height. then the result is a distance of 8.8km.
+
+### Prediction Calories Burned
+```{r}
+
+model <- lm(calories~step_total+weight+height, data =fitbit)
+summary(model)
+```
+all variables except weight have a p-value less than 0.05, which indicates that they are significant in predicting the dependent variable total_distance is very significant to determine the amount of total_distance. every 1 unit in step_total will increase the value of the dependent variable (calories) by 0.08652.  
+
+### Predict 
+```{r}
+df <- data.frame(step_total=c(9000),weight=c(80),height=c(171))
+predictions <- predict(model, newdata=df)
+predictions
+
+```
+if we enter the value of 9000 for total steps, 80 for weight, and 171 for height. then the result is a 2422.95 calories burned
