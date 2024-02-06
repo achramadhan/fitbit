@@ -195,7 +195,7 @@ summary(fitbit)
 ```
 
 ### Distribution of Bmi Category
-```{r}
+```{r message=FALSE, warning=FALSE}
 library(ggplot2)
 fitbit %>% group_by(bmi_category) %>% 
   summarise (total = n_distinct(id),.groups = "drop")%>%
@@ -206,7 +206,8 @@ fitbit %>% group_by(bmi_category) %>%
   theme_minimal()
 
 ```
-there is a change in data from 33 to 35, it can be ascertained that there are two ids experiencing changes in the bmi category, over the past month. from the chart we know that normal weight, overweight, and obesity. are high users of the app.
+
+there is a change in data from 33 to 35, it can be ascertained that there are two ids experiencing changes in the bmi category, over the past month. from the chart we know that normal weight, overweight, and obesity are high users of the app.
 
 ### usage type per BMI Category
 ```{r}
@@ -215,7 +216,8 @@ fitbit %>% group_by(bmi_category, usage) %>%
   ggplot(aes(usage,total, fill=bmi_category))+
   geom_bar(stat="identity", position=position_dodge())+
   labs(title="Total by BMI Category",
-       caption = "high use = average user using the apps more than 20 hours, moderate = average user using the apps from 11 to 20 hours")+
+       caption = "high use = average user using the apps more than 20 hours, 
+       moderate = average user using the apps from 11 to 20 hours")+
   theme_minimal()
 ```
 
@@ -227,10 +229,13 @@ fitbit %>% group_by(bmi_category, user_type) %>%
   ggplot(aes(user_type,total, fill=bmi_category))+
   geom_bar(stat="identity", position=position_dodge())+
   labs(title="Total by BMI Category",
-       caption = "categorizes the average step per user, the value <=5000 is sendentary, <7500 is lightly active, <10000 is fairly active, else very active")+
+       caption = "categorizes the average step per user, 
+       the value <=5000 is sendentary, <7500 is lightly active, 
+       <10000 is fairly active, else very active")+
   theme_minimal()
 
 ```
+
 this is the number of type of user based on bmi category
 
 ### Average Step by Days of Week
@@ -241,16 +246,17 @@ fitbit %>%
   group_by(activity_date, bmi_category) %>% 
   summarise(mean_distance = mean(total_distance),.groups = "drop") %>% 
   ggplot(aes(activity_date, mean_distance, group = bmi_category, color=bmi_category))+
-  geom_line(size = 1.4)+
+  geom_line(linewidth = 1.4)+
   theme_minimal()+
   labs(title ="Activity Average Distance by BMI Category",
     y = "Total Distance (KM)")
 
 ```
+
 almost all bmi categories take steps above the recommended 4000-5000 per day. obesity is most active in taking an average of more than 6.5KM of steps per day. 
 
 ### Time Sleep vs Total Step
-```{r}
+```{r message=FALSE, warning=FALSE}
 library(gridExtra)
 grid.arrange(
 {fitbit %>% mutate(activity_date = wday(activity_date, label=TRUE)) %>% 
@@ -271,14 +277,15 @@ grid.arrange(
     geom_jitter()+
     geom_smooth(color="red")+
   labs(title = 'Total Step vs Total Sleep',
-       y = "Total Step",
-       x = "Total Sleep",
+       y = "Total Sleep (in minutes)",
+       x = "Total Step",
        caption = "correlation :-0.1868665 ")},
 ncol=2 
 )
 
 ```
-Due to the lack of 530 rows of data, the results of the plot above show the average per day in hours spent by users to sleep. the average user already has the recommended quality of sleep between 6 to 8 hours. but obesity on Sundays has below average quality, while underweight on Monday, Wednesday, Thursday has below average sleep time.
+
+Due to the lack of 530 rows of data, the results of the plot above show the average per day in hours spent by users to sleep. the average user already has the recommended quality of sleep between 6 to 8 hours. but obesity on Sundays, tuesday and saturday has below average quality, while underweight on Monday, Wednesday, Thursday has below average sleep time. there is no correlation how much taking step in a day for quality of sleep in a day
 
 
 
@@ -289,12 +296,15 @@ Due to the lack of 530 rows of data, the results of the plot above show the aver
 library(reshape2)
 # changing fitbit tabel to long format
 fitbit_melt <- fitbit %>% select(-c(bmi_category,id,activity_date, usage, user_type, total_minutes_asleep,total_time_in_bed))
-# Menghitung matriks korelasi
-fitbit_cor <- round(cor(fitbit_melt, use = "pairwise.complete.obs"),2)
-#because there is na value in 2 column, we use pairwise.complete.obs
+
+# calculating correlation
+fitbit_cor <- round(cor(fitbit_melt),2)
+
 melt <- melt(fitbit_cor)
 head(melt)
 ```
+
+
 ### Creating Heatmap Correlation
 
 ```{r}
@@ -314,6 +324,7 @@ model <- lm(total_distance~step_total+weight+height, data =fitbit)
 summary(model)
 
 ```
+
 weight and height are not very significant, while step_total is very significant to determine the amount of total_distance. every 1 unit in total_step will increase the value of the dependent variable (distance) by 0.000757.  
 
 
